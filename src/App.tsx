@@ -28,6 +28,33 @@ type Path = string;
 type Resource = string;
 
 
+interface UsePositionTracker {
+  elementRef: React.RefObject<HTMLDivElement>;
+  getPosition: () => [number, number];
+  visits: (rect: DOMRect|null, tl: gsap.core.Timeline) => void;
+  getRect: () => DOMRect|null;
+}
+
+// const {elementRef, getPosition, visit} = usePositionTracker();
+function usePositionTracker(): UsePositionTracker {
+  const elementRef = useRef<HTMLDivElement>(null);
+
+  const getPosition = (): [number, number] => {
+    const rect = elementRef.current?.getBoundingClientRect();
+    if (!rect) return [0, 0];
+    return [rect.x + (rect.width / 2), rect.y + (rect.height / 2)];
+  };
+
+  const getRect = () => elementRef.current?.getBoundingClientRect() || null;
+
+  const visits = (rect: DOMRect|null, tl: gsap.core.Timeline) => {
+    if (!elementRef.current || !rect) return;
+    const x = rect.x + rect.width / 2;
+    tl.to(elementRef.current, { x, duration: 2 });
+  };
+
+  return { elementRef, getPosition, visits, getRect };
+}
 
 abstract class PositionTracker {
   protected elementRef: React.RefObject<HTMLDivElement>;
@@ -42,194 +69,130 @@ abstract class PositionTracker {
     return rect.x + (rect.width / 2);
   }
 
+  visit(tl: gsap.core.Timeline, x: number) {
+    if (!this.elementRef.current)
+      return;
+    tl.to(this.elementRef.current, {x, duration: 2})
+  }
+
+
   abstract render(): ReactNode;
 }
 
 
 
-class Webpage extends PositionTracker {
-  domain_to_path: {[domain: Domain]: {[path: Path]: Resource}};
+const useWebpage = (resources: UrlResource[]) => {
+  const {elementRef, getRect: getWebpageRect} = usePositionTracker();
+  const domain_to_path: {[domain: Domain]: {[path: Path]: Resource}} = {};
+  resources.forEach(r => {
+    if (domain_to_path[r.domain] === undefined)
+      domain_to_path[r.domain] = {};
+    domain_to_path[r.domain][r.path] = '';
+  })
 
-  constructor(resources: UrlResource[]) {
-    super();
-    this.domain_to_path = {};
-    resources.forEach(r => {
-      if (this.domain_to_path[r.domain] === undefined)
-        this.domain_to_path[r.domain] = {};
-      this.domain_to_path[r.domain][r.path] = '';
-    })
-  }
-  render() {
-    return (
-      <div ref={this.elementRef}>
-        <center>
-          <h2>Webpage</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Domain</th>
-                <th>Path</th>
-                <th>Resource</th>
+  return {getWebpageRect, renderWebpage: () => (
+    <div ref={elementRef}>
+      <center>
+        <h2>Webpage</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Domain</th>
+              <th>Path</th>
+              <th>Resource</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(domain_to_path).map(([domain, path_to_resource]) =>
+              Object.entries(path_to_resource).map(([path, resource]) => (
+                <tr key={`${domain}${path}`}>
+                  <td style={{textAlign: 'right'}}>{domain}</td>
+                  <td>{path}</td>
+                  <td>{resource}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </center>
+    </div>
+  )};
+};
+
+// const {getPosition: getDNSPosition, visit: visitDNS, render: renderDNS} = useDNS();
+const useDNS = (resources: UrlResource[]) => {
+  const {elementRef, getRect: getDNSRect} = usePositionTracker();
+  const domain_to_ip: {[domain: Domain]: IP} = {};
+  resources.forEach(r => {
+    domain_to_ip[r.domain] = r.ip;
+  });
+  return {getDNSRect, renderDNS: () => (
+    <div ref={elementRef}>
+      <center>
+        <h2>DNS</h2>
+        <table>
+          <thead>
+            {Object.entries(domain_to_ip).map(([domain, ip]) => (
+              <tr key={`${domain}${ip}`}>
+                <td>{domain}</td>
+                <td>{ip}</td>
               </tr>
-            </thead>
-            <tbody>
-              {Object.entries(this.domain_to_path).map(([domain, path_to_resource]) =>
+            ))}
+          </thead>
+        </table>
+      </center>
+    </div>
+  )};
+};
+
+const useInternet = (resources: UrlResource[]) => {
+  const {elementRef, getRect: getInternetRect} = usePositionTracker();
+  //               domain_dict        path_dict
+  const ip_to_domain: {[ip: IP]: {[domain: Domain]: {[path: Path]: Resource}}} = {};
+  resources.forEach(r => {
+    var domain_to_path = ip_to_domain[r.ip];
+    if (domain_to_path === undefined)
+      domain_to_path = ip_to_domain[r.ip] = {};
+
+    var path_to_resource = domain_to_path[r.domain];
+    if (path_to_resource === undefined)
+      path_to_resource = domain_to_path[r.domain] = {};
+
+    path_to_resource[r.path] = r.resource;
+  });
+
+  return {getInternetRect, renderInternet: () => (
+    <div ref={elementRef}>
+      <center>
+        <h2>Internet</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>IP</th>
+              <th>Domain</th>
+              <th>Path</th>
+              <th>Resource</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(ip_to_domain).map(([ip, domain_to_path]) => (
+              Object.entries(domain_to_path).map(([domain, path_to_resource]) => (
                 Object.entries(path_to_resource).map(([path, resource]) => (
-                  <tr key={`${domain}${path}`}>
+                  <tr key={`${ip}${domain}${path}${resource}`}>
+                    <td>{ip}</td>
                     <td style={{textAlign: 'right'}}>{domain}</td>
                     <td>{path}</td>
                     <td>{resource}</td>
                   </tr>
                 ))
-              )}
-            </tbody>
-          </table>
-        </center>
-      </div>
-    );
-  }
+              ))
+            ))}
+          </tbody>
+        </table>
+      </center>
+    </div>
+  )};
 };
-
-class DNS extends PositionTracker{
-  domain_to_ip: {[domain: Domain]: IP};
-  constructor(resources: UrlResource[]) {
-    super();
-    this.domain_to_ip = {};
-    resources.forEach(r => {
-      this.domain_to_ip[r.domain] = r.ip;
-    })
-  }
-  render() {
-    return (
-      <div ref={this.elementRef}>
-        <center>
-          <h2>DNS</h2>
-          <table>
-            <thead>
-              {Object.entries(this.domain_to_ip).map(([domain, ip]) => (
-                <tr key={`${domain}${ip}`}>
-                  <td>{domain}</td>
-                  <td>{ip}</td>
-                </tr>
-              ))}
-            </thead>
-          </table>
-        </center>
-      </div>
-    );
-  }
-};
-
-class Internet extends PositionTracker {
-  //               domain_dict        path_dict
-  ip_to_domain: {[ip: IP]: {[domain: Domain]: {[path: Path]: Resource}}}
-  constructor(resources: UrlResource[]) {
-    super();
-    this.ip_to_domain = {};
-    resources.forEach(r => {
-      var domain_to_path = this.ip_to_domain[r.ip];
-      if (domain_to_path === undefined)
-        domain_to_path = this.ip_to_domain[r.ip] = {};
-
-      var path_to_resource = domain_to_path[r.domain];
-      if (path_to_resource === undefined)
-        path_to_resource = domain_to_path[r.domain] = {};
-
-      path_to_resource[r.path] = r.resource;
-    });
-  }
-
-  render() {
-    return (
-      <div ref={this.elementRef}>
-        <center>
-          <h2>Internet</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>IP</th>
-                <th>Domain</th>
-                <th>Path</th>
-                <th>Resource</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(this.ip_to_domain).map(([ip, domain_to_path]) => (
-                Object.entries(domain_to_path).map(([domain, path_to_resource]) => (
-                  Object.entries(path_to_resource).map(([path, resource]) => (
-                    <tr key={`${ip}${domain}${path}${resource}`}>
-                      <td>{ip}</td>
-                      <td style={{textAlign: 'right'}}>{domain}</td>
-                      <td>{path}</td>
-                      <td>{resource}</td>
-                    </tr>
-                  ))
-                ))
-              ))}
-            </tbody>
-          </table>
-        </center>
-      </div>
-    );
-  }
-};
-
-class Worker extends PositionTracker {
-  visit(tl: gsap.core.Timeline, position_tracker: PositionTracker) {
-    if (!this.elementRef.current)
-      return;
-    console.log(this.elementRef.current);
-    const rect = this.elementRef.current.getBoundingClientRect();
-    const width = rect.width / 2;
-    console.log('width should be >0:', width)
-    tl.to(this.elementRef.current, {x: position_tracker.getX() - width, duration: 2})
-  }
-
-  render() {
-    return (
-      <p ref={this.elementRef} style={{border: 'solid 1px red', width: 'fit-content'}}>
-        <h2>Worker</h2>
-        {(() => {console.log('Worker', this.elementRef.current?.getBoundingClientRect()); return <></>;})()}
-      </p>
-    );
-  }
-};
-
-
-// website is a simple url,resource table. in all tables
-// described here, each table is a key-value hash map, and each <td>
-// should be a component that can be cloned, and
-// the clone is animated to move to its new location where it will be copied
-// to, in the destination table. if we need, we can make the special 'Item' component
-// to make them easier to manipulate
-const webpage = new Webpage(resources);
-
-// DNS is a simple domain,ip table
-const dns = new DNS(resources);
-
-// internet is a ip,domain,url,content table
-const internet = new Internet(resources);
-
-// initializes a data structure represented as a table with columns for
-// domain, ip, path, content, which will get populated as the worker
-// travels around
-// const worker = new Worker();
-
-// webpage exposes its x location within the canvas,
-// worker animates by updating its own x to match.
-// this call signature is inspired by lifetime.to(thisworker, ...),
-// since the worker knows about itself and therefore can easily do the lt.to call.
-//const worker = new Worker();
-//worker.visit(webpage);
-
-// one of the following:
-// webpage.urls.forEach(u => worker.record(u.domain));
-// webpage.urls.forEach(url => worker.record_domain(url));
-// worker.record_domains(webpage);
-
-// animate
-// worker.visit(dns);
-// 
 
 
 const Flex = ({content, flex}: {content: React.ReactNode, flex?: number}) => {
@@ -270,11 +233,11 @@ const useGSAPSpeedController = (animation: gsap.core.Timeline|null) => {
     <div className="p-8">
       <div className="mb-4">
         <label className="mr-2">Animation Speed:</label>
-        <input 
-          type="range" 
-          min="0.1" 
-          max="3" 
-          step="0.1" 
+        <input
+          type="range"
+          min="-3"
+          max="3"
+          step="0.1"
           value={speed}
           onChange={(e) => handleSpeedChange(parseFloat(e.target.value))}
           className="w-48"
@@ -285,29 +248,67 @@ const useGSAPSpeedController = (animation: gsap.core.Timeline|null) => {
   );
 };
 
+
+class InfoItem {
+  private element: HTMLElement;
+  constructor(element: HTMLElement) {
+    this.element = element;
+    gsap.set(element, { opacity: 0, position: 'absolute' });
+  }
+  transfer(from: DOMRect, to: DOMRect, content: string, timeline: GSAPTimeline) {
+    // set to from position and visible
+    timeline.set(this.element, {visibility: 1, x: from.x, y: from.y, content: content})
+    // animate to to position
+    timeline.to(this.element, {x: to.x, y: to.y});
+    // make invisible
+    timeline.to(this.element, {visibility: 0});
+  }
+};
+
+
+const useBrowser = () => {
+  const {visits: browserVisits, elementRef} = usePositionTracker();
+  return {browserVisits, renderBrowser: () => (
+      <div ref={elementRef} style={{border: 'solid 1px red', width: 'fit-content'}}>
+        <h2>Web Browser</h2>
+      </div>
+    )};
+};
+
+
 function App() {
-  const worker = new Worker();
+  console.log("App");
+  const {renderDNS, getDNSRect} = useDNS(resources);
+  const {renderWebpage, getWebpageRect} = useWebpage(resources);
+  const {renderInternet, getInternetRect} = useInternet(resources);
+  const {renderBrowser, browserVisits} = useBrowser();
+
   const tlRef = useRef<gsap.core.Timeline|null>(null);
+  const infoItemRef = useRef<HTMLDivElement>(null);
+  const infoItem = useRef<InfoItem>();
   const speedController = useGSAPSpeedController(tlRef.current);
 
-
   useEffect(() => {
-    console.log("components ready rendering")
     const tl = gsap.timeline({paused: true});
+    if (infoItemRef.current)
+      infoItem.current = new InfoItem(infoItemRef.current);
     tlRef.current = tl;
 
-    requestAnimationFrame(() => {
-      ScrollTrigger.refresh();
-      worker.visit(tl, webpage);
-      // worker.extract_domains(webpage);
+    // ScrollTrigger.refresh();
+    browserVisits(getWebpageRect(), tl);
+    // browser.extract_domains(tl, webpage);
+    // webpage.
+    // browser.extract_domains(tl, webpage);
 
-      worker.visit(tl, dns);
-      // worker.translate_domains(dns);
-      worker.visit(tl, webpage);
-      worker.visit(tl, internet);
-      worker.visit(tl, webpage);
-      // tl.play();
-    })
+    browserVisits(getDNSRect(), tl);
+    // browser.translate_domains(dns);
+    browserVisits(getWebpageRect(), tl);
+    // browser.grab_urls(webpage);
+    browserVisits(getInternetRect(), tl);
+    // browser.grab_resources(internet);
+    browserVisits(getWebpageRect(), tl);
+    // browser.inject_resources(webpage);
+    // tl.play();
 
     return () =>  {
       tl.kill();
@@ -317,13 +318,16 @@ function App() {
   return (
     <div>
       <Flexbox>
-        <Flex content={webpage.render()} />
-        <Flex content={dns.render()} flex={0.5} />
-        <Flex content={internet.render()} />
+        <Flex content={renderWebpage()} />
+        <Flex content={renderDNS()} flex={0.5} />
+        <Flex content={renderInternet()} />
       </Flexbox>
-      {worker.render()}
+      {/* Type 'MutableRefObject<HTMLElement | undefined>' is not as */}
+      <div ref={infoItemRef} />
+      {renderBrowser()}
       {speedController}
-      <button onClick={() => tlRef.current && tlRef.current.play()}>Play!</button>
+      <button onClick={() => tlRef.current && tlRef.current.restart()}>
+        Play!</button>
     </div>
   );
 }
