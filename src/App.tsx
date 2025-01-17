@@ -30,7 +30,6 @@ type Resource = string;
 
 interface UsePositionTracker {
   elementRef: React.RefObject<HTMLDivElement>;
-  getPosition: () => [number, number];
   visits: (rect: DOMRect|null, tl: gsap.core.Timeline) => void;
   getRect: () => DOMRect|null;
 }
@@ -39,46 +38,17 @@ interface UsePositionTracker {
 function usePositionTracker(): UsePositionTracker {
   const elementRef = useRef<HTMLDivElement>(null);
 
-  const getPosition = (): [number, number] => {
-    const rect = elementRef.current?.getBoundingClientRect();
-    if (!rect) return [0, 0];
-    return [rect.x + (rect.width / 2), rect.y + (rect.height / 2)];
-  };
-
   const getRect = () => elementRef.current?.getBoundingClientRect() || null;
 
-  const visits = (rect: DOMRect|null, tl: gsap.core.Timeline) => {
-    if (!elementRef.current || !rect) return;
-    const x = rect.x + rect.width / 2;
+  const visits = (or: DOMRect|null, tl: gsap.core.Timeline) => {
+    const ir = getRect();
+    if (!elementRef.current || !ir || !or) return;
+    const x = or.x + (or.width/2) - (ir.width/2);
     tl.to(elementRef.current, { x, duration: 2 });
   };
 
-  return { elementRef, getPosition, visits, getRect };
+  return { elementRef, visits, getRect };
 }
-
-abstract class PositionTracker {
-  protected elementRef: React.RefObject<HTMLDivElement>;
-
-  constructor() {
-    this.elementRef = React.createRef();
-  }
-
-  getX(): number {
-    const rect = this.elementRef.current?.getBoundingClientRect();
-    if (!rect) return 0;
-    return rect.x + (rect.width / 2);
-  }
-
-  visit(tl: gsap.core.Timeline, x: number) {
-    if (!this.elementRef.current)
-      return;
-    tl.to(this.elementRef.current, {x, duration: 2})
-  }
-
-
-  abstract render(): ReactNode;
-}
-
 
 
 const useWebpage = (resources: UrlResource[]) => {
@@ -277,7 +247,6 @@ const useBrowser = () => {
 
 
 function App() {
-  console.log("App");
   const {renderDNS, getDNSRect} = useDNS(resources);
   const {renderWebpage, getWebpageRect} = useWebpage(resources);
   const {renderInternet, getInternetRect} = useInternet(resources);
