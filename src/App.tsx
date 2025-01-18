@@ -1,7 +1,7 @@
-import React, { Component, createRef, ReactNode, RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { TextPlugin } from 'gsap/TextPlugin';
-import { ScrollTrigger } from 'gsap/all';
+import { useGSAP } from '@gsap/react';
 gsap.registerPlugin(TextPlugin);
 
 // if it makes sense, we can convert UrlResource
@@ -44,7 +44,7 @@ function usePositionTracker(): UsePositionTracker {
     const ir = getRect();
     if (!elementRef.current || !ir || !or) return;
     const x = or.x + (or.width/2) - (ir.width/2);
-    tl.to(elementRef.current, { x, duration: 2 });
+    tl.add(() => {tl.to(elementRef.current, { x, duration: 2 });});
   };
 
   return { elementRef, visits, getRect };
@@ -59,8 +59,14 @@ const useWebpage = (resources: UrlResource[]) => {
       domain_to_path[r.domain] = {};
     domain_to_path[r.domain][r.path] = '';
   })
+  const getWebpageDomains = () => {
+    // how do we populate this with all the <td> elements that contain domains below?
+    if (!elementRef.current) return [];
+    const domainCells = Array.from(elementRef.current.querySelectorAll('tbody tr td:first-child'));
+    return domainCells as HTMLElement[];
+  };
 
-  return {getWebpageRect, renderWebpage: () => (
+  return {getWebpageRect, getWebpageDomains, renderWebpage: () => (
     <div ref={elementRef}>
       <center>
         <h2>Webpage</h2>
@@ -76,6 +82,7 @@ const useWebpage = (resources: UrlResource[]) => {
             {Object.entries(domain_to_path).map(([domain, path_to_resource]) =>
               Object.entries(path_to_resource).map(([path, resource]) => (
                 <tr key={`${domain}${path}`}>
+                  {/* this domain right here */}
                   <td style={{textAlign: 'right'}}>{domain}</td>
                   <td>{path}</td>
                   <td>{resource}</td>
@@ -96,7 +103,14 @@ const useDNS = (resources: UrlResource[]) => {
   resources.forEach(r => {
     domain_to_ip[r.domain] = r.ip;
   });
-  return {getDNSRect, renderDNS: () => (
+
+  const getDnsIps = (_: any) => {
+    // how do we populate this with all the <td> elements that contain domains below?
+    if (!elementRef.current) return [];
+    const domainCells = Array.from(elementRef.current.querySelectorAll('tbody tr td td:first-child'));
+    return domainCells as HTMLElement[];
+  };
+  return {getDNSRect, getDnsIps, renderDNS: () => (
     <div ref={elementRef}>
       <center>
         <h2>DNS</h2>
@@ -205,7 +219,7 @@ const useGSAPSpeedController = (animation: gsap.core.Timeline|null) => {
         <label className="mr-2">Animation Speed:</label>
         <input
           type="range"
-          min="-3"
+          min="0"
           max="3"
           step="0.1"
           value={speed}
@@ -218,64 +232,166 @@ const useGSAPSpeedController = (animation: gsap.core.Timeline|null) => {
   );
 };
 
+export const spy = (v: any) => {console.log(v); return v;};
 
 class InfoItem {
   private element: HTMLElement;
   constructor(element: HTMLElement) {
     this.element = element;
-    gsap.set(element, { opacity: 0, position: 'absolute' });
+    // visibility: 'hidden'
+    gsap.set(element, { position: 'absolute' });
   }
-  transfer(from: DOMRect, to: DOMRect, content: string, timeline: GSAPTimeline) {
-    // set to from position and visible
-    timeline.set(this.element, {visibility: 1, x: from.x, y: from.y, content: content})
-    // animate to to position
-    timeline.to(this.element, {x: to.x, y: to.y});
-    // make invisible
-    timeline.to(this.element, {visibility: 0});
+  transfer(from_ele: HTMLElement, to_ele_fn: (() => HTMLElement|null), content: string, timeline: GSAPTimeline, vars: GSAPTweenVars) {
+    const from = () => from_ele.getBoundingClientRect();
+    const to = () => to_ele_fn()?.getBoundingClientRect();
+
+    timeline.add(() => {timeline.set(this.element, {position: 'absolute', left: from()?.left, top: from()?.top, text: content, visibility: 'visible'});});
+
+    timeline.add(() => {
+      timeline.to(this.element, {
+        onStart: () => {
+          if (vars.onStart)
+            vars.onStart();
+          gsap.set(this.element, {position: 'absolute', left: () => from()?.left, top: () => from()?.top, text: content});
+        },
+        top: () => to()?.top || 0,
+        left: () => to()?.left || 0,
+        duration: 2,
+        ...vars,
+      });
+    })
+    // timeline.add(() => {
+    //   const fromRect = from();
+    //   timeline.set(this.element, { top: fromRect.top, left: fromRect.left, text: content});
+    // });
+
+    timeline.add(() => {timeline.set(this.element, {visibility: 'hidden'});});
   }
 };
 
 
+
+
+interface BrowserRow {
+  domain: Domain;
+  path: Path;
+  ip: IP;
+  resource: Resource;
+};
+
 const useBrowser = () => {
   const {visits: browserVisits, elementRef} = usePositionTracker();
-  return {browserVisits, renderBrowser: () => (
+  const [rows, setRows] = useState<BrowserRow[]>([]);
+
+  const getLastRow = () => {
+    return document.getElementById('end_domain_position') as HTMLElement;
+  };
+
+  const browserTrack = (ele: HTMLElement, ii: InfoItem|undefined, tl: GSAPTimeline) => {
+    if (!ii || !elementRef.current) return;
+
+    ii.transfer(ele, getLastRow, ele.innerHTML, tl, {
+      onStart: () => {setRows(rows => [...rows, {domain: ele.innerText, path: '', ip: '', resource: ''}]);},
+      onReverseComplete: () => {setRows((rows) => {const newRows = [...rows]; newRows.pop(); return newRows;});},
+    });
+  };
+
+  const browserTrackDomain = (ele: HTMLElement, ii: InfoItem|undefined, tl: GSAPTimeline) => {
+    if (!ii || !elementRef.current) return;
+
+    ii.transfer(ele, getLastRow, ele.innerHTML, tl, {
+      onComplete: () => {setRows(rows => [...rows, {domain: ele.innerText, path: '', ip: '', resource: ''}]);},
+      onReverseComplete: () => {setRows((rows) => {const newRows = [...rows]; newRows.pop(); return newRows;});},
+    });
+  };
+  const browserTrackIP = () => {};
+  return {browserVisits, browserTrackDomain, browserTrackIP, renderBrowser: () => (
       <div ref={elementRef} style={{border: 'solid 1px red', width: 'fit-content'}}>
-        <h2>Web Browser</h2>
+        <center>
+          <h2>Web Browser</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Domain</th>
+                <th>Path</th>
+                <th>IP</th>
+                <th>Resource</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r: BrowserRow, i: number) => (
+                <tr key={`browser_row_${i}`}>
+                  <td>{r.domain}</td>
+                  <td>{r.path}</td>
+                  <td>{r.ip}</td>
+                  <td>{r.resource}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <table>
+            <thead>
+              <tr style={{visibility: 'hidden'}}>
+                <th id="end_domain_position">Domain</th>
+                <th>Path</th>
+                <th>IP</th>
+                <th>Resource</th>
+              </tr>
+            </thead>
+          </table>
+        </center>
       </div>
     )};
 };
 
 
-function App() {
-  const {renderDNS, getDNSRect} = useDNS(resources);
-  const {renderWebpage, getWebpageRect} = useWebpage(resources);
+//////////////////////////////////////////////////////////////
+// TODO
+//////////////////////////////////////////////////////////////
+//
+// load everything immediately, but hide everything by default
+// and make them appear as part of the animations.
+//
+function App2() {
+  const {renderDNS, getDNSRect, getDnsIps} = useDNS(resources);
+  const {renderWebpage, getWebpageRect, getWebpageDomains} = useWebpage(resources);
   const {renderInternet, getInternetRect} = useInternet(resources);
-  const {renderBrowser, browserVisits} = useBrowser();
+  const {renderBrowser, browserVisits, browserTrackDomain, browserTrackIP} = useBrowser();
 
   const tlRef = useRef<gsap.core.Timeline|null>(null);
   const infoItemRef = useRef<HTMLDivElement>(null);
   const infoItem = useRef<InfoItem>();
   const speedController = useGSAPSpeedController(tlRef.current);
 
-  useEffect(() => {
+  useGSAP(() => {
     const tl = gsap.timeline({paused: true});
     if (infoItemRef.current)
       infoItem.current = new InfoItem(infoItemRef.current);
     tlRef.current = tl;
 
     // ScrollTrigger.refresh();
+
     browserVisits(getWebpageRect(), tl);
+    // browserTrackDomain(getWebpageDomains(), infoItem.current, tl);
+    getWebpageDomains().forEach((ele: HTMLElement, _, __) => {
+      browserTrackDomain(ele, infoItem.current, tl);
+    });
+
     // browser.extract_domains(tl, webpage);
     // webpage.
     // browser.extract_domains(tl, webpage);
 
     browserVisits(getDNSRect(), tl);
+    getDnsIps(getWebpageDomains()).forEach((ele: HTMLElement, _, __) => {
+      browserTrackIP(ele, infoItem.current, tl);
+    });
+
     // browser.translate_domains(dns);
-    browserVisits(getWebpageRect(), tl);
+    // browserVisits(getWebpageRect(), tl);
     // browser.grab_urls(webpage);
-    browserVisits(getInternetRect(), tl);
+    // browserVisits(getInternetRect(), tl);
     // browser.grab_resources(internet);
-    browserVisits(getWebpageRect(), tl);
+    // browserVisits(getWebpageRect(), tl);
     // browser.inject_resources(webpage);
     // tl.play();
 
@@ -292,13 +408,86 @@ function App() {
         <Flex content={renderInternet()} />
       </Flexbox>
       {/* Type 'MutableRefObject<HTMLElement | undefined>' is not as */}
-      <div ref={infoItemRef} />
+      <div ref={infoItemRef} style={{position: 'absolute'}} />
       {renderBrowser()}
       {speedController}
       <button onClick={() => tlRef.current && tlRef.current.restart()}>
         Play!</button>
+      <button onClick={() => tlRef.current && tlRef.current.reverse()}>
+        Reverse!</button>
+      <input type="range" min={0} max={1} step={0.1} onChange={(e) => {tlRef.current?.play(); tlRef.current?.to(infoItemRef.current, {duration: 0.1, x: 1800*parseFloat(e.target.value)})}} />
     </div>
   );
+}
+
+
+const TableAnimation: React.FC = () => {
+  const [destData, setDestData] = useState<string[]>([]);
+  const animationRef = useRef<HTMLDivElement | null>(null);
+
+  const handleAnimate = (item: string, fromElement: HTMLElement, toElement: HTMLElement) => {
+    const fromRect = fromElement.getBoundingClientRect();
+    const toRect = toElement.getBoundingClientRect();
+
+    const animElement = animationRef.current!;
+    animElement.textContent = item;
+    animElement.style.position = "absolute";
+    animElement.style.top = `${fromRect.top}px`;
+    animElement.style.left = `${fromRect.left}px`;
+    animElement.style.width = `${fromRect.width}px`;
+    animElement.style.height = `${fromRect.height}px`;
+    animElement.style.backgroundColor = "white";
+    animElement.style.border = "1px solid black";
+
+    gsap.set(animElement, {x: fromRect.x-fromRect.left, y: fromRect.y-fromRect.top});
+    gsap.to(animElement, {
+      x: toRect.left - fromRect.left,
+      y: toRect.top - fromRect.top,
+      duration: 1,
+      onComplete: () => {
+        setDestData((prev) => [...prev, item]);
+      },
+      onReverseComplete: () => {
+        setDestData((prev) => {prev.pop(); return prev;})
+      }
+    });
+    gsap.set(animElement, {autoAlpha: 1})
+  };
+
+  return (
+    <div>
+      <table>
+        <tbody>
+          <tr>
+            {["A", "B", "C"].map((item, idx) => (
+              <td
+                key={idx}
+                onClick={(e) => handleAnimate(item, e.currentTarget, document.getElementById(`dest-${idx}`)!)}
+              >
+                {item}
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+      <div ref={animationRef} style={{ pointerEvents: "none" }} />
+      <table>
+        <tbody>
+          <tr>
+            {[0, 1, 2].map((idx) => (
+              <td key={idx} id={`dest-${idx}`}>
+                {destData[idx] || ""}
+              </td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+function App() {
+  return <App2 />;
 }
 
 export default App
