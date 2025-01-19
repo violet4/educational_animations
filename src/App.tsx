@@ -589,6 +589,24 @@ interface Fruit {
   Weight: number;
 };
 
+class GSAPState {
+  private originalVars: GSAPTweenVars;
+  private target: GSAPTweenTarget;
+
+  constructor(target: GSAPTweenTarget, vars: GSAPTweenVars) {
+    this.target = target;
+    this.originalVars = Object.fromEntries(
+      Object.keys(vars).map(key => [key, gsap.getProperty(target, key)])
+    );
+    gsap.set(target, vars);
+  }
+
+  dispose() {
+    gsap.set(this.target, this.originalVars);
+  }
+}
+
+
 const Demo = () => {
   gsap.registerPlugin();
   const fruit_data = [
@@ -604,21 +622,28 @@ const Demo = () => {
     const tl = gsap.timeline({paused: false});
 
     const getItem = () => itemRef.current?.getElement()||'';
-    ['Name', 'Color', 'Weight'].forEach((key: string) => {
-      const k = key as keyof Fruit;
-      table2Ref.current?.getCells(k).forEach((ele: HTMLElement) => tl.set(ele, {visibility: 'hidden'}));
-    });
 
-    const transfer = (e1: HTMLElement, e2: HTMLElement, duration: number=1) => {
+    const transfer = (e1: HTMLElement, e2: HTMLElement, duration: number=1.5) => {
       tl.set(getItem(), {position: 'absolute', visibility: 'visible', text: e1.innerText, top: e1.getBoundingClientRect().top, left: e1.getBoundingClientRect().left});
-      tl.to(getItem(), {duration, left: e2.getBoundingClientRect().left, top: e2.getBoundingClientRect().top});
+      tl.to(getItem(), {duration, ease: 'circ.inOut', left: e2.getBoundingClientRect().left, top: e2.getBoundingClientRect().top});
       tl.set(getItem(), {visibility: 'hidden'});
       tl.set(e2, {visibility: 'visible'})
     };
+
+    // setup
+    ['Name', 'Color', 'Weight'].forEach((key: string) => {
+      const k = key as keyof Fruit;
+      table2Ref.current?.getCells(k).forEach((ele: HTMLElement) => {ele.style.visibility = 'hidden';});
+    });
+
+    // animate
+    tl.delay(1);
     ['Name', 'Color', 'Weight'].forEach((key: string) => {
       const k = key as keyof Fruit;
       zip(table1Ref.current?.getCells(k)||[], table2Ref.current?.getCells(k)||[]).forEach(([e1, e2]) => {
+        const state = new GSAPState(getItem(), { color: 'red' });
         transfer(e1, e2);
+        state.dispose();
       })
     });
 
