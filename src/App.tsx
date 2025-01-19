@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useImperativeHandle, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { TextPlugin } from 'gsap/TextPlugin';
 import { useGSAP } from '@gsap/react';
@@ -57,7 +57,7 @@ const useWebpage = (resources: UrlResource[]) => {
   resources.forEach(r => {
     if (domain_to_path[r.domain] === undefined)
       domain_to_path[r.domain] = {};
-    domain_to_path[r.domain][r.path] = '';
+    domain_to_path[r.domain][r.path] = r.resource;
   })
   const getWebpageDomains = () => {
     // how do we populate this with all the <td> elements that contain domains below?
@@ -345,13 +345,6 @@ const useBrowser = () => {
 };
 
 
-//////////////////////////////////////////////////////////////
-// TODO
-//////////////////////////////////////////////////////////////
-//
-// load everything immediately, but hide everything by default
-// and make them appear as part of the animations.
-//
 function App2() {
   const {renderDNS, getDNSRect, getDnsIps} = useDNS(resources);
   const {renderWebpage, getWebpageRect, getWebpageDomains} = useWebpage(resources);
@@ -486,8 +479,133 @@ const TableAnimation: React.FC = () => {
   );
 };
 
+
+interface DynamicTableProps<T extends object> {
+  data: T[];
+}
+
+interface DynamicTableRef<T extends object> {
+  getCells: () => HTMLTableCellElement[];
+  getData: () => T[];
+  getCell: (rowIndex: number, columnName: keyof T) => HTMLTableCellElement | null;
+}
+
+const DynamicTable = React.forwardRef(<T extends object>(
+  { data }: DynamicTableProps<T>,
+  ref: React.ForwardedRef<DynamicTableRef<T>>
+) => {
+    const cellRefs = useRef<Map<string, HTMLTableCellElement>>(new Map());
+
+    useImperativeHandle(ref, () => ({
+      getCells: () => Array.from(cellRefs.current.values()),
+      getData: () => data,
+      getCell: (rowIndex: number, columnName: keyof T) => 
+        cellRefs.current.get(`${rowIndex}-${String(columnName)}`) || null
+    }));
+
+    if (!data.length) return null;
+    const headers = Object.keys(data[0]);
+    
+    return (
+      <table className="w-full border-collapse">
+        <thead>
+          <tr>
+            {headers.map(header => (
+              <th key={header} className="p-2 border">{header}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row, rowIndex) => (
+            <tr key={rowIndex}>
+              {headers.map(header => (
+                <td 
+                  key={`${rowIndex}-${header}`}
+                  ref={el => el && cellRefs.current.set(`${rowIndex}-${header}`, el)}
+                  className="p-2 border"
+                >
+                  {String(row[header as keyof T])}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+);
+
+
+interface DynamicItemRef {
+  setContent: (content: string) => void;
+  getElement: () => HTMLDivElement;
+}
+
+const DynamicItem = React.forwardRef((
+  {},
+  ref: React.ForwardedRef<DynamicItemRef>
+) => {
+    const itemRef = useRef<HTMLDivElement>(null);
+    const [content, setContent] = useState<string>('');
+
+    useImperativeHandle(ref, () => ({
+      setContent: (content: string) => setContent(content),
+      getElement: () => {
+        if (!itemRef.current) throw new Error("Ref not initialized");
+        return itemRef.current;
+      },
+    }));
+
+    return (
+      <div ref={itemRef}>
+        {content}
+      </div>
+    );
+  }
+);
+
+
+interface Fruit {
+  Name: string;
+  Color: string;
+  Weight: number;
+};
+
+const Demo = () => {
+  gsap.registerPlugin();
+  const fruit_data = [{Name: 'Apple', Color: 'red', Weight: 0.5}];
+  const table1Ref = useRef<DynamicTableRef<Fruit>>(null);
+  const table2Ref = useRef<DynamicTableRef<Fruit>>(null);
+  const itemRef = useRef<DynamicItemRef>(null);
+  // const tlRef = useRef<gsap.core.Timeline|null>(null);
+
+  useGSAP(() => {
+    if (!table1Ref.current || !table2Ref.current) return;
+    const tl = gsap.timeline({paused: false});
+    const first_apple = table1Ref.current.getCell(0, 'Name');
+    const second_apple = table2Ref.current.getCell(0, 'Name');
+
+    const getItem = () => itemRef.current?.getElement()||'';
+    tl.set(second_apple, {visibility: 'hidden'});
+    tl.set(getItem(), {position: 'absolute', visibility: 'visible', text: first_apple?.innerText, top: first_apple?.getBoundingClientRect().top, left: first_apple?.getBoundingClientRect().left});
+    tl.to(getItem(), {duration: 2, left: second_apple?.getBoundingClientRect().left, top: second_apple?.getBoundingClientRect().top});
+    tl.set(getItem(), {visibility: 'hidden'});
+    tl.set(second_apple, {visibility: 'visible'})
+
+
+  }, []);
+  return (
+    <div>
+      <DynamicTable ref={table1Ref} data={fruit_data} />
+      <DynamicTable ref={table2Ref} data={fruit_data} />
+      <DynamicItem ref={itemRef} />
+    </div>
+  );
+};
+
 function App() {
-  return <App2 />;
+  // return <App2 />;
+  return <Demo />;
 }
 
 export default App
