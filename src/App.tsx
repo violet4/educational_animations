@@ -485,7 +485,7 @@ interface DynamicTableProps<T extends object> {
 }
 
 interface DynamicTableRef<T extends object> {
-  getCells: () => HTMLTableCellElement[];
+  getCells: (field: keyof T|null) => HTMLTableCellElement[];
   getData: () => T[];
   getCell: (rowIndex: number, columnName: keyof T) => HTMLTableCellElement | null;
 }
@@ -495,17 +495,22 @@ const DynamicTable = React.forwardRef(<T extends object>(
   ref: React.ForwardedRef<DynamicTableRef<T>>
 ) => {
     const cellRefs = useRef<Map<string, HTMLTableCellElement>>(new Map());
+    const columnRefs = useRef<Map<keyof T, HTMLTableCellElement[]>>(new Map());
 
     useImperativeHandle(ref, () => ({
-      getCells: () => Array.from(cellRefs.current.values()),
+      getCells: (field: keyof T|null=null) => {
+        if (field === null)
+          return Array.from(cellRefs.current.values())
+        return columnRefs.current.get(field)||[];
+      },
       getData: () => data,
-      getCell: (rowIndex: number, columnName: keyof T) => 
+      getCell: (rowIndex: number, columnName: keyof T) =>
         cellRefs.current.get(`${rowIndex}-${String(columnName)}`) || null
     }));
 
     if (!data.length) return null;
     const headers = Object.keys(data[0]);
-    
+
     return (
       <table className="w-full border-collapse">
         <thead>
@@ -518,10 +523,18 @@ const DynamicTable = React.forwardRef(<T extends object>(
         <tbody>
           {data.map((row, rowIndex) => (
             <tr key={rowIndex}>
-              {headers.map(header => (
-                <td 
+              {headers.map((header: string, _, __) => (
+                <td
                   key={`${rowIndex}-${header}`}
-                  ref={el => el && cellRefs.current.set(`${rowIndex}-${header}`, el)}
+                  ref={el => {
+                    if (!el)
+                      return;
+                    cellRefs.current.set(`${rowIndex}-${header}`, el);
+                    const h = header as keyof T;
+                    if (!columnRefs.current.get(h))
+                      columnRefs.current.set(h, []);
+                    columnRefs.current.get(h)?.push(el);
+                  }}
                   className="p-2 border"
                 >
                   {String(row[header as keyof T])}
@@ -564,6 +577,11 @@ const DynamicItem = React.forwardRef((
   }
 );
 
+function zip<T, U>(arr1: T[], arr2: U[]): [T, U][] {
+ return Array.from({ length: Math.min(arr1.length, arr2.length) },
+   (_, i) => [arr1[i], arr2[i]]
+ );
+}
 
 interface Fruit {
   Name: string;
@@ -573,24 +591,36 @@ interface Fruit {
 
 const Demo = () => {
   gsap.registerPlugin();
-  const fruit_data = [{Name: 'Apple', Color: 'red', Weight: 0.5}];
+  const fruit_data = [
+    {Name: 'Apple', Color: 'red', Weight: 0.5},
+    {Name: 'Banana', Color: 'yellow', Weight: 0.75},
+  ];
   const table1Ref = useRef<DynamicTableRef<Fruit>>(null);
   const table2Ref = useRef<DynamicTableRef<Fruit>>(null);
   const itemRef = useRef<DynamicItemRef>(null);
-  // const tlRef = useRef<gsap.core.Timeline|null>(null);
 
   useGSAP(() => {
     if (!table1Ref.current || !table2Ref.current) return;
     const tl = gsap.timeline({paused: false});
-    const first_apple = table1Ref.current.getCell(0, 'Name');
-    const second_apple = table2Ref.current.getCell(0, 'Name');
 
     const getItem = () => itemRef.current?.getElement()||'';
-    tl.set(second_apple, {visibility: 'hidden'});
-    tl.set(getItem(), {position: 'absolute', visibility: 'visible', text: first_apple?.innerText, top: first_apple?.getBoundingClientRect().top, left: first_apple?.getBoundingClientRect().left});
-    tl.to(getItem(), {duration: 2, left: second_apple?.getBoundingClientRect().left, top: second_apple?.getBoundingClientRect().top});
-    tl.set(getItem(), {visibility: 'hidden'});
-    tl.set(second_apple, {visibility: 'visible'})
+    ['Name', 'Color', 'Weight'].forEach((key: string) => {
+      const k = key as keyof Fruit;
+      table2Ref.current?.getCells(k).forEach((ele: HTMLElement) => tl.set(ele, {visibility: 'hidden'}));
+    });
+
+    const transfer = (e1: HTMLElement, e2: HTMLElement, duration: number=1) => {
+      tl.set(getItem(), {position: 'absolute', visibility: 'visible', text: e1.innerText, top: e1.getBoundingClientRect().top, left: e1.getBoundingClientRect().left});
+      tl.to(getItem(), {duration, left: e2.getBoundingClientRect().left, top: e2.getBoundingClientRect().top});
+      tl.set(getItem(), {visibility: 'hidden'});
+      tl.set(e2, {visibility: 'visible'})
+    };
+    ['Name', 'Color', 'Weight'].forEach((key: string) => {
+      const k = key as keyof Fruit;
+      zip(table1Ref.current?.getCells(k)||[], table2Ref.current?.getCells(k)||[]).forEach(([e1, e2]) => {
+        transfer(e1, e2);
+      })
+    });
 
 
   }, []);
