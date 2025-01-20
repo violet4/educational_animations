@@ -15,169 +15,6 @@ interface UrlResource {
   resource: string;
 }
 
-const resources: UrlResource[] = [
-  { domain: 'images.com', path: '/cats.png', type: 'content', ip: '1.2.3.4', resource: '😺' },
-  { domain: 'videos.com', path: '/puppies.mp4', type: 'content', ip: '1.2.3.5', resource: '🐶' },
-  { domain: 'ads.com', path: '/tracking.js', type: 'tracking', ip: '6.6.6.1', resource: '🙄' },
-  { domain: 'tracking.com', path: '/pixel.png', type: 'tracking', ip: '6.6.6.2', resource: '🤬' },
-];
-
-type IP = string;
-type Domain = string;
-type Path = string;
-type Resource = string;
-
-
-interface UsePositionTracker {
-  elementRef: React.RefObject<HTMLDivElement>;
-  visits: (rect: DOMRect|null, tl: gsap.core.Timeline) => void;
-  getRect: () => DOMRect|null;
-}
-
-// const {elementRef, getPosition, visit} = usePositionTracker();
-function usePositionTracker(): UsePositionTracker {
-  const elementRef = useRef<HTMLDivElement>(null);
-
-  const getRect = () => elementRef.current?.getBoundingClientRect() || null;
-
-  const visits = (or: DOMRect|null, tl: gsap.core.Timeline) => {
-    const ir = getRect();
-    if (!elementRef.current || !ir || !or) return;
-    const x = or.x + (or.width/2) - (ir.width/2);
-    tl.add(() => {tl.to(elementRef.current, { x, duration: 2 });});
-  };
-
-  return { elementRef, visits, getRect };
-}
-
-
-const useWebpage = (resources: UrlResource[]) => {
-  const {elementRef, getRect: getWebpageRect} = usePositionTracker();
-  const domain_to_path: {[domain: Domain]: {[path: Path]: Resource}} = {};
-  resources.forEach(r => {
-    if (domain_to_path[r.domain] === undefined)
-      domain_to_path[r.domain] = {};
-    domain_to_path[r.domain][r.path] = r.resource;
-  })
-  const getWebpageDomains = () => {
-    // how do we populate this with all the <td> elements that contain domains below?
-    if (!elementRef.current) return [];
-    const domainCells = Array.from(elementRef.current.querySelectorAll('tbody tr td:first-child'));
-    return domainCells as HTMLElement[];
-  };
-
-  return {getWebpageRect, getWebpageDomains, renderWebpage: () => (
-    <div ref={elementRef}>
-      <center>
-        <h2>Webpage</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Domain</th>
-              <th>Path</th>
-              <th>Resource</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(domain_to_path).map(([domain, path_to_resource]) =>
-              Object.entries(path_to_resource).map(([path, resource]) => (
-                <tr key={`${domain}${path}`}>
-                  {/* this domain right here */}
-                  <td style={{textAlign: 'right'}}>{domain}</td>
-                  <td>{path}</td>
-                  <td>{resource}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </center>
-    </div>
-  )};
-};
-
-// const {getPosition: getDNSPosition, visit: visitDNS, render: renderDNS} = useDNS();
-const useDNS = (resources: UrlResource[]) => {
-  const {elementRef, getRect: getDNSRect} = usePositionTracker();
-  const domain_to_ip: {[domain: Domain]: IP} = {};
-  resources.forEach(r => {
-    domain_to_ip[r.domain] = r.ip;
-  });
-
-  const getDnsIps = (_: any) => {
-    // how do we populate this with all the <td> elements that contain domains below?
-    if (!elementRef.current) return [];
-    const domainCells = Array.from(elementRef.current.querySelectorAll('tbody tr td td:first-child'));
-    return domainCells as HTMLElement[];
-  };
-  return {getDNSRect, getDnsIps, renderDNS: () => (
-    <div ref={elementRef}>
-      <center>
-        <h2>DNS</h2>
-        <table>
-          <thead>
-            {Object.entries(domain_to_ip).map(([domain, ip]) => (
-              <tr key={`${domain}${ip}`}>
-                <td>{domain}</td>
-                <td>{ip}</td>
-              </tr>
-            ))}
-          </thead>
-        </table>
-      </center>
-    </div>
-  )};
-};
-
-const useInternet = (resources: UrlResource[]) => {
-  const {elementRef, getRect: getInternetRect} = usePositionTracker();
-  //               domain_dict        path_dict
-  const ip_to_domain: {[ip: IP]: {[domain: Domain]: {[path: Path]: Resource}}} = {};
-  resources.forEach(r => {
-    var domain_to_path = ip_to_domain[r.ip];
-    if (domain_to_path === undefined)
-      domain_to_path = ip_to_domain[r.ip] = {};
-
-    var path_to_resource = domain_to_path[r.domain];
-    if (path_to_resource === undefined)
-      path_to_resource = domain_to_path[r.domain] = {};
-
-    path_to_resource[r.path] = r.resource;
-  });
-
-  return {getInternetRect, renderInternet: () => (
-    <div ref={elementRef}>
-      <center>
-        <h2>Internet</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>IP</th>
-              <th>Domain</th>
-              <th>Path</th>
-              <th>Resource</th>
-            </tr>
-          </thead>
-          <tbody>
-            {Object.entries(ip_to_domain).map(([ip, domain_to_path]) => (
-              Object.entries(domain_to_path).map(([domain, path_to_resource]) => (
-                Object.entries(path_to_resource).map(([path, resource]) => (
-                  <tr key={`${ip}${domain}${path}${resource}`}>
-                    <td>{ip}</td>
-                    <td style={{textAlign: 'right'}}>{domain}</td>
-                    <td>{path}</td>
-                    <td>{resource}</td>
-                  </tr>
-                ))
-              ))
-            ))}
-          </tbody>
-        </table>
-      </center>
-    </div>
-  )};
-};
-
 
 const Flex = ({content, flex}: {content: React.ReactNode, flex?: number}) => {
   if (flex === undefined)
@@ -233,186 +70,6 @@ const useGSAPSpeedController = (animation: gsap.core.Timeline|null) => {
 };
 
 export const spy = (v: any) => {console.log(v); return v;};
-
-class InfoItem {
-  private element: HTMLElement;
-  constructor(element: HTMLElement) {
-    this.element = element;
-    // visibility: 'hidden'
-    gsap.set(element, { position: 'absolute' });
-  }
-  transfer(from_ele: HTMLElement, to_ele_fn: (() => HTMLElement|null), content: string, timeline: GSAPTimeline, vars: GSAPTweenVars) {
-    const from = () => from_ele.getBoundingClientRect();
-    const to = () => to_ele_fn()?.getBoundingClientRect();
-
-    timeline.add(() => {timeline.set(this.element, {position: 'absolute', left: from()?.left, top: from()?.top, text: content, visibility: 'visible'});});
-
-    timeline.add(() => {
-      timeline.to(this.element, {
-        onStart: () => {
-          if (vars.onStart)
-            vars.onStart();
-          gsap.set(this.element, {position: 'absolute', left: () => from()?.left, top: () => from()?.top, text: content});
-        },
-        top: () => to()?.top || 0,
-        left: () => to()?.left || 0,
-        duration: 2,
-        ...vars,
-      });
-    })
-    // timeline.add(() => {
-    //   const fromRect = from();
-    //   timeline.set(this.element, { top: fromRect.top, left: fromRect.left, text: content});
-    // });
-
-    timeline.add(() => {timeline.set(this.element, {visibility: 'hidden'});});
-  }
-};
-
-
-
-
-interface BrowserRow {
-  domain: Domain;
-  path: Path;
-  ip: IP;
-  resource: Resource;
-};
-
-const useBrowser = () => {
-  const {visits: browserVisits, elementRef} = usePositionTracker();
-  const [rows, setRows] = useState<BrowserRow[]>([]);
-
-  const getLastRow = () => {
-    return document.getElementById('end_domain_position') as HTMLElement;
-  };
-
-  const browserTrack = (ele: HTMLElement, ii: InfoItem|undefined, tl: GSAPTimeline) => {
-    if (!ii || !elementRef.current) return;
-
-    ii.transfer(ele, getLastRow, ele.innerHTML, tl, {
-      onStart: () => {setRows(rows => [...rows, {domain: ele.innerText, path: '', ip: '', resource: ''}]);},
-      onReverseComplete: () => {setRows((rows) => {const newRows = [...rows]; newRows.pop(); return newRows;});},
-    });
-  };
-
-  const browserTrackDomain = (ele: HTMLElement, ii: InfoItem|undefined, tl: GSAPTimeline) => {
-    if (!ii || !elementRef.current) return;
-
-    ii.transfer(ele, getLastRow, ele.innerHTML, tl, {
-      onComplete: () => {setRows(rows => [...rows, {domain: ele.innerText, path: '', ip: '', resource: ''}]);},
-      onReverseComplete: () => {setRows((rows) => {const newRows = [...rows]; newRows.pop(); return newRows;});},
-    });
-  };
-  const browserTrackIP = () => {};
-  return {browserVisits, browserTrackDomain, browserTrackIP, renderBrowser: () => (
-      <div ref={elementRef} style={{border: 'solid 1px red', width: 'fit-content'}}>
-        <center>
-          <h2>Web Browser</h2>
-          <table>
-            <thead>
-              <tr>
-                <th>Domain</th>
-                <th>Path</th>
-                <th>IP</th>
-                <th>Resource</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r: BrowserRow, i: number) => (
-                <tr key={`browser_row_${i}`}>
-                  <td>{r.domain}</td>
-                  <td>{r.path}</td>
-                  <td>{r.ip}</td>
-                  <td>{r.resource}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <table>
-            <thead>
-              <tr style={{visibility: 'hidden'}}>
-                <th id="end_domain_position">Domain</th>
-                <th>Path</th>
-                <th>IP</th>
-                <th>Resource</th>
-              </tr>
-            </thead>
-          </table>
-        </center>
-      </div>
-    )};
-};
-
-
-function App2() {
-  const {renderDNS, getDNSRect, getDnsIps} = useDNS(resources);
-  const {renderWebpage, getWebpageRect, getWebpageDomains} = useWebpage(resources);
-  const {renderInternet, getInternetRect} = useInternet(resources);
-  const {renderBrowser, browserVisits, browserTrackDomain, browserTrackIP} = useBrowser();
-
-  const tlRef = useRef<gsap.core.Timeline|null>(null);
-  const infoItemRef = useRef<HTMLDivElement>(null);
-  const infoItem = useRef<InfoItem>();
-  const speedController = useGSAPSpeedController(tlRef.current);
-
-  useGSAP(() => {
-    const tl = gsap.timeline({paused: true});
-    if (infoItemRef.current)
-      infoItem.current = new InfoItem(infoItemRef.current);
-    tlRef.current = tl;
-
-    // ScrollTrigger.refresh();
-
-    browserVisits(getWebpageRect(), tl);
-    // browserTrackDomain(getWebpageDomains(), infoItem.current, tl);
-    getWebpageDomains().forEach((ele: HTMLElement, _, __) => {
-      browserTrackDomain(ele, infoItem.current, tl);
-    });
-
-    // browser.extract_domains(tl, webpage);
-    // webpage.
-    // browser.extract_domains(tl, webpage);
-
-    browserVisits(getDNSRect(), tl);
-    getDnsIps(getWebpageDomains()).forEach((ele: HTMLElement, _, __) => {
-      browserTrackIP(ele, infoItem.current, tl);
-    });
-
-    // browser.translate_domains(dns);
-    // browserVisits(getWebpageRect(), tl);
-    // browser.grab_urls(webpage);
-    // browserVisits(getInternetRect(), tl);
-    // browser.grab_resources(internet);
-    // browserVisits(getWebpageRect(), tl);
-    // browser.inject_resources(webpage);
-    // tl.play();
-
-    return () =>  {
-      tl.kill();
-      tlRef.current = null;
-    }
-  }, []);
-  return (
-    <div>
-      <Flexbox>
-        <Flex content={renderWebpage()} />
-        <Flex content={renderDNS()} flex={0.5} />
-        <Flex content={renderInternet()} />
-      </Flexbox>
-      {/* Type 'MutableRefObject<HTMLElement | undefined>' is not as */}
-      <div ref={infoItemRef} style={{position: 'absolute'}} />
-      {renderBrowser()}
-      {speedController}
-      <button onClick={() => tlRef.current && tlRef.current.restart()}>
-        Play!</button>
-      <button onClick={() => tlRef.current && tlRef.current.reverse()}>
-        Reverse!</button>
-      <input type="range" min={0} max={1} step={0.1} onChange={(e) => {tlRef.current?.play(); tlRef.current?.to(infoItemRef.current, {duration: 0.1, x: 1800*parseFloat(e.target.value)})}} />
-    </div>
-  );
-}
-
 
 
 interface DynamicTableProps<T extends object> {
@@ -518,11 +175,6 @@ function zip<T, U>(arr1: T[], arr2: U[]): [T, U][] {
  );
 }
 
-interface Fruit {
-  Name: string;
-  Color: string;
-  Weight: number;
-};
 
 class GSAPState {
   private originalVars: GSAPTweenVars;
@@ -544,10 +196,10 @@ class GSAPState {
 
 const makeItemTransferFn = (tl: gsap.core.Timeline, getItem: () => GSAPTweenTarget) => {
   const transfer = (e1: HTMLElement, e2: HTMLElement, duration: number=1.5) => {
-    tl.set(getItem(), {position: 'absolute', visibility: 'visible', text: e1.innerText, top: e1.getBoundingClientRect().top, left: e1.getBoundingClientRect().left});
+    tl.set(getItem(), {position: 'absolute', visibility: () => 'visible', text: e1.innerHTML, top: e1.getBoundingClientRect().top, left: e1.getBoundingClientRect().left});
     // circ.inOut
     tl.to(getItem(), {duration, ease: 'sine.inOut', left: e2.getBoundingClientRect().left, top: e2.getBoundingClientRect().top});
-    tl.set(getItem(), {visibility: 'hidden'});
+    // tl.set(getItem(), {visibility: 'hidden'});
     tl.set(e2, {visibility: 'visible'})
   };
   return transfer;
@@ -574,50 +226,97 @@ function hideCells<T extends object>(
   });
 }
 
-const Demo = () => {
+
+
+const resources: UrlResource[] = [
+  { domain: 'images.com', path: '/cats.png', type: 'content', ip: '1.2.3.4', resource: '😺' },
+  { domain: 'videos.com', path: '/puppies.mp4', type: 'content', ip: '1.2.3.5', resource: '🐶' },
+  { domain: 'ads.com', path: '/tracking.js', type: 'tracking', ip: '6.6.6.1', resource: '🙄' },
+  { domain: 'tracking.com', path: '/pixel.png', type: 'tracking', ip: '6.6.6.2', resource: '🤬' },
+];
+
+
+const DNSAnimation = () => {
   gsap.registerPlugin();
-  const fruit_data = [
-    {Name: 'Apple', Color: 'red', Weight: 0.5},
-    {Name: 'Banana', Color: 'yellow', Weight: 0.75},
-  ];
-  const table1Ref = useRef<DynamicTableRef<Fruit>>(null);
-  const table2Ref = useRef<DynamicTableRef<Fruit>>(null);
+
+  const dnsTableRef = useRef<DynamicTableRef<Partial<UrlResource>>>(null);
+  const internetTableRef = useRef<DynamicTableRef<Partial<UrlResource>>>(null);
+  const browserTableRef = useRef<DynamicTableRef<Partial<UrlResource>>>(null);
+  const webpageTableRef = useRef<DynamicTableRef<Partial<UrlResource>>>(null);
   const itemRef = useRef<DynamicItemRef>(null);
 
+
   useGSAP(() => {
-    if (!table1Ref.current || !table2Ref.current) return;
+    if (!dnsTableRef.current || !internetTableRef.current
+        || !browserTableRef.current || !webpageTableRef.current)
+      return;
     const tl = gsap.timeline({paused: false});
 
     const getItem = () => itemRef.current?.getElement()||'';
     const transfer = makeItemTransferFn(tl, getItem);
 
-    hideCells(table2Ref.current, ['Name', 'Color', 'Weight']);
+    hideCells(browserTableRef.current, ['domain', 'ip', 'path', 'resource']);
+    hideCells(webpageTableRef.current, ['resource']);
 
     // animate
     tl.delay(1);
-    ['Name', 'Color', 'Weight'].forEach((key: string) => {
-      const k = key as keyof Fruit;
-      zip(table1Ref.current?.getCells(k)||[], table2Ref.current?.getCells(k)||[]).forEach(([e1, e2]) => {
-        const state = new GSAPState(getItem(), { color: 'red' });
-        transfer(e1, e2);
-        state.dispose();
-      })
-    });
+
+    // browser takes domains from webpage
+    zip(webpageTableRef.current?.getCells('domain')||[], browserTableRef.current?.getCells('domain')||[]).forEach(([e1, e2]) => {
+      const state = new GSAPState(getItem(), { color: 'red' });
+      transfer(e1, e2);
+      state.dispose();
+    })
+
+    // browser takes IPs from DNS
+    zip(dnsTableRef.current?.getCells('ip')||[], browserTableRef.current?.getCells('ip')||[]).forEach(([e1, e2]) => {
+      const state = new GSAPState(getItem(), { color: 'red' });
+      transfer(e1, e2);
+      state.dispose();
+    })
+
+    // browser takes paths from webpage
+    zip(webpageTableRef.current?.getCells('path')||[], browserTableRef.current?.getCells('path')||[]).forEach(([e1, e2]) => {
+      const state = new GSAPState(getItem(), { color: 'red' });
+      transfer(e1, e2);
+      state.dispose();
+    })
+
+    // browser takes resources from internet
+    zip(internetTableRef.current?.getCells('resource')||[], browserTableRef.current?.getCells('resource')||[]).forEach(([e1, e2]) => {
+      transfer(e1, e2);
+    })
+
+    // browser populates webpage with resources
+    zip(browserTableRef.current?.getCells('resource')||[], webpageTableRef.current?.getCells('resource')||[]).forEach(([e1, e2]) => {
+      transfer(e1, e2);
+    })
 
   }, []);
+
   return (
     <div>
-      <DynamicTable ref={table1Ref} data={fruit_data} />
-      <DynamicTable ref={table2Ref} data={fruit_data} />
-      <DynamicItem ref={itemRef} as={'td'}/>
+      <Flexbox>
+        <Flex content={<DynamicTable ref={webpageTableRef} data={resources.map((r: UrlResource) => ({domain: r.domain, path: r.path, resource: r.resource}))} />}/>
+        <Flex content={<DynamicTable ref={dnsTableRef} data={resources.map((r: UrlResource) => ({domain: r.domain, ip: r.ip}))} />}/>
+        <Flex content={<DynamicTable ref={internetTableRef} data={resources} />}/>
+      </Flexbox>
+      <table>
+        <tbody>
+          <tr>
+            <DynamicItem ref={itemRef} as={'td'}/>
+          </tr>
+        </tbody>
+      </table>
+      <DynamicTable ref={browserTableRef} data={resources.map((r: UrlResource) => ({ip: r.ip, domain: r.domain, path: r.path, resource: r.resource}))} />
     </div>
   );
 };
 
 
+
 function App() {
-  // return <App2 />;
-  return <Demo />;
+  return <DNSAnimation />;
 }
 
 export default App
