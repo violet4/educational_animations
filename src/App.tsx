@@ -554,8 +554,12 @@ interface DynamicItemRef {
   getElement: () => HTMLDivElement;
 }
 
+interface DynamicItemProps {
+  as?: keyof JSX.IntrinsicElements;
+};
+
 const DynamicItem = React.forwardRef((
-  {},
+  {as = 'div'}: DynamicItemProps,
   ref: React.ForwardedRef<DynamicItemRef>
 ) => {
     const itemRef = useRef<HTMLDivElement>(null);
@@ -569,11 +573,7 @@ const DynamicItem = React.forwardRef((
       },
     }));
 
-    return (
-      <div ref={itemRef}>
-        {content}
-      </div>
-    );
+    return React.createElement(as, {ref: itemRef}, content);
   }
 );
 
@@ -607,6 +607,18 @@ class GSAPState {
 }
 
 
+const makeItemTransferFn = (tl: gsap.core.Timeline, getItem: () => GSAPTweenTarget) => {
+  const transfer = (e1: HTMLElement, e2: HTMLElement, duration: number=1.5) => {
+    tl.set(getItem(), {position: 'absolute', visibility: 'visible', text: e1.innerText, top: e1.getBoundingClientRect().top, left: e1.getBoundingClientRect().left});
+    // circ.inOut
+    tl.to(getItem(), {duration, ease: 'sine.inOut', left: e2.getBoundingClientRect().left, top: e2.getBoundingClientRect().top});
+    tl.set(getItem(), {visibility: 'hidden'});
+    tl.set(e2, {visibility: 'visible'})
+  };
+  return transfer;
+};
+
+
 const Demo = () => {
   gsap.registerPlugin();
   const fruit_data = [
@@ -622,13 +634,7 @@ const Demo = () => {
     const tl = gsap.timeline({paused: false});
 
     const getItem = () => itemRef.current?.getElement()||'';
-
-    const transfer = (e1: HTMLElement, e2: HTMLElement, duration: number=1.5) => {
-      tl.set(getItem(), {position: 'absolute', visibility: 'visible', text: e1.innerText, top: e1.getBoundingClientRect().top, left: e1.getBoundingClientRect().left});
-      tl.to(getItem(), {duration, ease: 'circ.inOut', left: e2.getBoundingClientRect().left, top: e2.getBoundingClientRect().top});
-      tl.set(getItem(), {visibility: 'hidden'});
-      tl.set(e2, {visibility: 'visible'})
-    };
+    const transfer = makeItemTransferFn(tl, getItem);
 
     // setup
     ['Name', 'Color', 'Weight'].forEach((key: string) => {
@@ -647,13 +653,12 @@ const Demo = () => {
       })
     });
 
-
   }, []);
   return (
     <div>
       <DynamicTable ref={table1Ref} data={fruit_data} />
       <DynamicTable ref={table2Ref} data={fruit_data} />
-      <DynamicItem ref={itemRef} />
+      <DynamicItem ref={itemRef} as={'td'}/>
     </div>
   );
 };
