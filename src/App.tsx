@@ -414,71 +414,6 @@ function App2() {
 }
 
 
-const TableAnimation: React.FC = () => {
-  const [destData, setDestData] = useState<string[]>([]);
-  const animationRef = useRef<HTMLDivElement | null>(null);
-
-  const handleAnimate = (item: string, fromElement: HTMLElement, toElement: HTMLElement) => {
-    const fromRect = fromElement.getBoundingClientRect();
-    const toRect = toElement.getBoundingClientRect();
-
-    const animElement = animationRef.current!;
-    animElement.textContent = item;
-    animElement.style.position = "absolute";
-    animElement.style.top = `${fromRect.top}px`;
-    animElement.style.left = `${fromRect.left}px`;
-    animElement.style.width = `${fromRect.width}px`;
-    animElement.style.height = `${fromRect.height}px`;
-    animElement.style.backgroundColor = "white";
-    animElement.style.border = "1px solid black";
-
-    gsap.set(animElement, {x: fromRect.x-fromRect.left, y: fromRect.y-fromRect.top});
-    gsap.to(animElement, {
-      x: toRect.left - fromRect.left,
-      y: toRect.top - fromRect.top,
-      duration: 1,
-      onComplete: () => {
-        setDestData((prev) => [...prev, item]);
-      },
-      onReverseComplete: () => {
-        setDestData((prev) => {prev.pop(); return prev;})
-      }
-    });
-    gsap.set(animElement, {autoAlpha: 1})
-  };
-
-  return (
-    <div>
-      <table>
-        <tbody>
-          <tr>
-            {["A", "B", "C"].map((item, idx) => (
-              <td
-                key={idx}
-                onClick={(e) => handleAnimate(item, e.currentTarget, document.getElementById(`dest-${idx}`)!)}
-              >
-                {item}
-              </td>
-            ))}
-          </tr>
-        </tbody>
-      </table>
-      <div ref={animationRef} style={{ pointerEvents: "none" }} />
-      <table>
-        <tbody>
-          <tr>
-            {[0, 1, 2].map((idx) => (
-              <td key={idx} id={`dest-${idx}`}>
-                {destData[idx] || ""}
-              </td>
-            ))}
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  );
-};
-
 
 interface DynamicTableProps<T extends object> {
   data: T[];
@@ -619,6 +554,26 @@ const makeItemTransferFn = (tl: gsap.core.Timeline, getItem: () => GSAPTweenTarg
 };
 
 
+function hideCells<T extends object>(
+  tableRef: DynamicTableRef<T>,
+  columns?: (keyof T)[]
+) {
+  if (!tableRef) return;
+
+  // If columns not provided, hide everything
+  if (!columns || !columns.length) {
+    const data = tableRef.getData();
+    if (!data.length) return;
+    columns = Object.keys(data[0]) as (keyof T)[];
+  }
+
+  columns.forEach((col) => {
+    tableRef.getCells(col).forEach(cell => {
+      cell.style.visibility = 'hidden';
+    });
+  });
+}
+
 const Demo = () => {
   gsap.registerPlugin();
   const fruit_data = [
@@ -636,11 +591,7 @@ const Demo = () => {
     const getItem = () => itemRef.current?.getElement()||'';
     const transfer = makeItemTransferFn(tl, getItem);
 
-    // setup
-    ['Name', 'Color', 'Weight'].forEach((key: string) => {
-      const k = key as keyof Fruit;
-      table2Ref.current?.getCells(k).forEach((ele: HTMLElement) => {ele.style.visibility = 'hidden';});
-    });
+    hideCells(table2Ref.current, ['Name', 'Color', 'Weight']);
 
     // animate
     tl.delay(1);
@@ -662,6 +613,7 @@ const Demo = () => {
     </div>
   );
 };
+
 
 function App() {
   // return <App2 />;
